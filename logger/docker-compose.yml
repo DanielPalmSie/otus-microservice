@@ -1,0 +1,124 @@
+version: '3.8'
+services:
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    image: myapp/nginx
+    container_name: webserver
+    ports:
+      - "80:80"
+    volumes:
+      - .:/data
+    networks:
+      - pgnet
+
+  app:
+    build:
+      context: ./fpm
+      dockerfile: Dockerfile
+    image: myapp/php
+    container_name: app
+    volumes:
+      - .:/data
+    networks:
+      - pgnet
+
+  postgresql:
+    image: postgres:latest
+    container_name: postgres
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB}"
+      POSTGRES_HOST: "${POSTGRES_HOST}"
+      POSTGRES_PORT: "${POSTGRES_PORT}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - pgnet
+
+  influxdb:
+    image: influxdb:latest
+    container_name: influxdb
+    ports:
+      - "8086:8086"
+    volumes:
+      - ./influxdb_data:/var/lib/influxdb
+    entrypoint: ["./entrypoint.sh"]
+    env_file:
+      - .env
+    networks:
+      - pgnet
+
+  telegraf:
+    image: telegraf:latest
+    container_name: telegraf
+    user: "telegraf:1"
+    volumes:
+      - ${TELEGRAF_CFG_PATH}:/etc/telegraf/telegraf.conf:rw
+      - /var/run/docker.sock:/var/run/docker.sock
+    env_file:
+      - .env
+    depends_on:
+      - influxdb
+    networks:
+      - pgnet
+
+  grafana:
+    image: grafana/grafana-oss
+    container_name: grafana
+    volumes:
+      - grafana-storage:/var/lib/grafana:rw
+    depends_on:
+      - influxdb
+    ports:
+      - ${GRAFANA_PORT}:3000
+    networks:
+      - pgnet
+
+  redis:
+    container_name: 'redis'
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - pgnet
+
+  redisinsight:
+    container_name: redisinsight
+    image: redis/redisinsight:latest
+    ports:
+      - "5540:5540"
+    volumes:
+      - redisinsight:/data
+    depends_on:
+      - redis
+    networks:
+      - pgnet
+
+  rabbitmq:
+    image: rabbitmq:3.7.5-management
+    working_dir: /app
+    hostname: rabbit-mq
+    container_name: 'rabbit-mq'
+    ports:
+      - 15672:15672
+      - 5672:5672
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+    networks:
+      - pgnet
+
+volumes:
+  pgdata:
+  influxdb_data:
+  grafana-storage:
+  redisinsight:
+
+networks:
+  pgnet:
+    driver: bridge

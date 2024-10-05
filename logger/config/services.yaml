@@ -1,0 +1,73 @@
+# This file is the entry point to configure your own services.
+# Files in the packages/ subdirectory configure your dependencies.
+
+# Put parameters here that don't need to change on each machine where the app is deployed
+# https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
+parameters:
+
+services:
+    # default configuration for services in *this* file
+    _defaults:
+        autowire: true      # Automatically injects dependencies in your services.
+        autoconfigure: true # Automatically registers your services as commands, event subscribers, etc.
+        bind:
+            $databaseUrl: '%env(resolve:DATABASE_URL)%'
+
+    # makes classes in src/ available to be used as services
+    # this creates a service per class whose id is the fully-qualified class name
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/DependencyInjection/'
+            - '../src/Entity/'
+            - '../src/Kernel.php'
+
+    App\Security\User\UserProvider:
+        arguments:
+            $pdo: '@pdo_connection'
+
+    App\Service\DatabaseService:
+        arguments:
+            $databaseUrl: '%env(resolve:DATABASE_URL)%'
+
+    App\Service\UserService:
+        arguments:
+            $databaseService: '@App\Service\DatabaseService'
+            $passwordHasher: '@security.password_hasher'
+
+    App\Command\LoadFeedDataCommand:
+        arguments:
+            $databaseService: '@App\Service\DatabaseService'
+
+    App\Service\AsyncService:
+        calls:
+            - [ 'registerProducer', [ !php/const App\Service\AsyncService::ADD_POST, '@old_sound_rabbit_mq.add_posts_producer' ] ]
+
+    redis:
+        class: Redis
+        calls:
+            - [ connect, [ '%env(REDIS_HOST)%' ] ]
+
+    App\Service\FeedService:
+        arguments:
+            $redis: '@redis'
+
+    App\Service\ChatService:
+        arguments:
+            $redis: '@redis'
+
+    App\Consumer\AddPosts\Consumer:
+        arguments:
+            $databaseService: '@App\Service\DatabaseService'
+            $redis: '@redis'
+
+    pdo_connection:
+        class: PDO
+        arguments:
+            - 'pgsql:host=%env(POSTGRES_HOST)%;port=%env(POSTGRES_PORT)%;dbname=%env(POSTGRES_DB)%'
+            - '%env(POSTGRES_USER)%'
+            - '%env(POSTGRES_PASSWORD)%'
+        calls:
+            - [ setAttribute, [ 3, 2 ] ]
+
+
