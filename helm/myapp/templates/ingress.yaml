@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: php-app-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/auth-url: "http://arch.homework/auth/v1/token/validate"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: arch.homework
+      http:
+        paths:
+          - path: /sender
+            pathType: Prefix
+            backend:
+              service:
+                name: sender-service
+                port:
+                  number: 81
+          - path: /receiver
+            pathType: Prefix
+            backend:
+              service:
+                name: receiver-service
+                port:
+                  number: 80
